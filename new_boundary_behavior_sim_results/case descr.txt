@@ -1,4 +1,36 @@
 case 11:
 l = d = b = r
 g = r^3
-()
+(i.e. g/(dx*l)-> 0, b/l -> C)
+- most 0s bc b is reached
+
+case 12: 
+l = d = r
+g = b = r^2
+(i.e. g/(dx*l)-> C, b/l -> 0)
+- most 0s bc r exceeds 2000000
+
+case 21: 
+l = d = b = r
+g = r^3
+(i.e. g/(dx*b)-> 0, l/b -> C)
+- most 0s bc b is reached
+
+case 22: 
+l = d = g = r^2
+b = r
+(i.e. g/(dx*b)-> c, l/b -> 0)
+- most 0s bc b is reached
+
+case 31: 
+l = d = g = r^2
+b = r
+(i.e. (dx*l)/(g)-> 0, (dx*b)/(g) -> c)
+- most 0s bc b is reached
+
+case 31: 
+l = d = r
+b = g = r^2
+(i.e. (dx*l)/(g)-> c, (dx*b)/(g) -> 0)
+- most 0s bc r exceeds 2000000
+
