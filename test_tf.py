@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+import csv
+import time
 
 def test_tf():
     print(tf.__version__)
@@ -23,6 +25,14 @@ def num_greater_than(a,THRESH):
         if a[i] >= THRESH:
             count += 1
     return count
+if tf.config.list_physical_devices('GPU'):
+    device = '/GPU:0'
+elif tf.config.list_physical_devices('MPS'):  # For Apple Silicon (M1/M2) GPUs
+    device = '/MPS:0'
+else:
+    device = '/CPU:0'
+
+print(f"Using device: {device}")
 
 test_tf()
 
@@ -126,22 +136,22 @@ def single_trial(x0,dx,R,b,delt,lam,bet,gam,rMax=100,l0=0,output=False):
     #   print("R is already reached")
     #   return reachedR
 
-    while(numComplete < len(x0)): 
+    while(numComplete < len(x0)):
         rInds = tf.argsort(currR)
         currX = tf.gather(currX,rInds)
         currL = tf.gather(currL,rInds)
         currR = tf.gather(currR,rInds)
         counters = tf.gather(counters,rInds)
-        print(currX)
-        print("numComplete: " + str(numComplete))
+        # print(currX)
+        # print(currR)
 
         rZeros = num_zeros(currR)
+        # print("rZeros: " + str(rZeros))
         rMaxNum = num_greater_than(currR,rMax)
         rAch,currR,rHitMax = tf.split(currR,[rZeros,len(currR)-rZeros-rMaxNum,rMaxNum],0)
         xAch,currX,xHitRMax = tf.split(currX,[rZeros,len(currX)-rZeros-rMaxNum,rMaxNum],0)
         lAch,currL,lHitRMax = tf.split(currL,[rZeros,len(currL)-rZeros-rMaxNum,rMaxNum],0)
         counterAch,counters,counterHitRMax = tf.split(counters,[rZeros,len(counters)-rZeros-rMaxNum,rMaxNum],0)
-
         #these are the values which will be returned at the end of the iteration
         numAch = len(rAch)
         numHitRMax = len(rHitMax)
@@ -157,10 +167,15 @@ def single_trial(x0,dx,R,b,delt,lam,bet,gam,rMax=100,l0=0,output=False):
         currR = tf.gather(currR,xInds)
         counters = tf.gather(counters,xInds)
 
+        
+        # print("xZeros: " + str(xZeros))
+        # print(currX)
+        # print(counters)
+        # print([xZeros,len(currX)-xZeros])
         xZeros = num_zeros(currX)
-        xLess,xGreater = tf.split(currX,[xZeros,len(currX)-xZeros],0)
-        lLess,lGreater = tf.split(currL,[xZeros,len(currL)-xZeros],0)
-        rLess,rGreater = tf.split(currR,[xZeros,len(currR)-xZeros],0)
+        xLess,xGreater = tf.split(currX,[num_zeros(currX),len(currX)-num_zeros(currX)],0)
+        lLess,lGreater = tf.split(currL,[num_zeros(currX),len(currL)-num_zeros(currX)],0)
+        rLess,rGreater = tf.split(currR,[num_zeros(currX),len(currR)-num_zeros(currX)],0)
         counterLess,counterGreater = tf.split(counters,[xZeros,len(counters)-xZeros],0)
 
         xLess = tf.zeros(len(xLess))
@@ -187,7 +202,6 @@ def single_trial(x0,dx,R,b,delt,lam,bet,gam,rMax=100,l0=0,output=False):
         else:
             xDispGreater,lDispGreater,rDispGreater = tf.zeros(0),tf.zeros(0),tf.zeros(0)
 
-        test = xGreater + xDispGreater*dx
         currX = tf.concat([xLess + xDispLess*dx, xGreater + xDispGreater*dx],0)
         currL = tf.concat([lLess + lDispLess*dx, lGreater + lDispGreater*dx],0)
         currR = R - currL
@@ -198,6 +212,10 @@ def single_trial(x0,dx,R,b,delt,lam,bet,gam,rMax=100,l0=0,output=False):
         currL = tf.concat([currL,lAch,lHitRMax],0)
         currR = tf.concat([currR,rAch,rHitMax],0)
         counters = tf.concat([counters,counterAch,counterHitRMax],0)
+
+        currX = tf.convert_to_tensor(np.round(currX.numpy(),1))
+        currL = tf.convert_to_tensor(np.round(currL.numpy(),1))
+        currR = tf.convert_to_tensor(np.round(currR.numpy(),1))
     
     return numAch, numHitRMax, numComplete
 
@@ -296,7 +314,7 @@ def get_prob_number(num_trials,x0,dx,R,b,delt,lam,bet,gam,epsilon,rMaxx=100,l00=
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #trying beta = gamma = 1/(ln(r+1)) THIS IS A NONSENSE COMMENT
-num_trials = 100
+num_trials = 10
 BIGR = 2
 trialX = np.linspace(0.1,2,5)
 trialR = np.linspace(0.1,2,5) # making the dimensions for my own orientation purposes
@@ -305,8 +323,8 @@ alphs = [.1*i for i in range(1,36)]
 # PROBS = np.empty(np.array(alphs).shape)
 # epsilon = 1
 
-NUMS_ACH = tf.zeros(len(alphs))
-NUMS_HIT_R_MAX = tf.zeros(len(alphs))
+NUMS_ACH = np.empty(np.array(alphs).shape)
+NUMS_HIT_R_MAX = np.empty(np.array(alphs).shape)
 
 # X, R = np.meshgrid(trialX, trialR)
 # PROBS = np.empty((5,5))
@@ -328,17 +346,21 @@ def betaa(x,l,r,dx):
 #   for x in range(len(PROBS[r])):
 #     print("r: "+str(trialR[r])+"  x: " + str(trialX[x]))
 #     PROBS[r][x]=get_prob_number(num_trials,trialX[x],.1,BIGR,50,deltaa,lambdaa,betaa,gammaa,epsilon,rMaxx=2000,l00 = BIGR-trialR[r],outputt=False)
-for a in range(len(alphs)):
-    def gammaa(x,l,r,dx):
-        return r**alphs[a]
-    print("alpha: " + str(alphs[a]))
-    NUMS_ACH[a], NUMS_HIT_R_MAX[a], _ = single_trial(tf.convert_to_tensor([1.0,1.0,1.0,1.0]),.1,BIGR,50,deltaa,lambdaa,betaa,gammaa,rMax=2000,l0 = BIGR-tf.convert_to_tensor([1.0,1.0,1.0,1.0]),output=False)
-    #get_prob_number(num_trials,1,.1,BIGR,50,deltaa,lambdaa,betaa,gammaa,epsilon,rMaxx=2000,l00 = BIGR-1,outputt=True)
+with tf.device(device):
+    for a in range(len(alphs)):
+        def gammaa(x,l,r,dx):
+            return r**alphs[a]
+        print("alpha: " + str(alphs[a]))
+        xxxx = time.time()
+        print("time: " + str(xxxx))
+        NUMS_ACH[a], NUMS_HIT_R_MAX[a], _ = single_trial(tf.ones(num_trials),.1,BIGR,50,deltaa,lambdaa,betaa,gammaa,rMax=2000,l0 = BIGR-tf.ones(num_trials),output=False)
+        print("time taken: " + str(time.time()-xxxx))
+        #get_prob_number(num_trials,1,.1,BIGR,50,deltaa,lambdaa,betaa,gammaa,epsilon,rMaxx=2000,l00 = BIGR-1,outputt=True)
 
-print(NUMS_ACH)
-print(NUMS_HIT_R_MAX)
-PROBS = [NUMS_ACH[a]/num_trials for a in range(len(alphs))]
+    print(NUMS_ACH)
+    print(NUMS_HIT_R_MAX)
+    PROBS = [NUMS_ACH[a]/num_trials for a in range(len(alphs))]
 
-with open('/Users/Greencat/sustainability-simulations/diff_alphas/diffAlphsStarting11_maxR2000_tfm1.csv', 'w') as f:
-  writer = csv.writer(f)
-  writer.writerows([PROBS])
+    with open('/Users/Greencat/sustainability-simulations/diff_alphas/diffAlphsStarting11_maxR2000_tfm1.csv', 'w') as f:
+        writer = csv.writer(f)
+        writer.writerows([PROBS])
